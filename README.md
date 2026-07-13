@@ -23,6 +23,15 @@ poetry install
 poetry run codex-ast-mapper --help
 ```
 
+## Demo
+
+```bash
+poetry run codex-ast-mapper --dir . --lang python --max-tokens 800
+asciinema play docs/demo/map-repo.cast
+```
+
+See [docs/demo/map-repo.md](docs/demo/map-repo.md).
+
 ## Usage
 
 ```bash
@@ -145,5 +154,15 @@ poetry run pytest -q
 [GNU Affero General Public License v3.0](LICENSE)
 
 This project uses **AGPL-3.0** (not GPL-3.0) so that network-hosted or
-service-wrapped deployments of the tool must also offer corresponding source,
-matching the copyleft posture of related repositories in this portfolio.
+service-wrapped deployments of the tool must also offer corresponding source.
+That is a deliberate copyleft choice for this suite — not an unexamined default.
+
+## Related projects
+
+| Project | Role |
+|---|---|
+| [codex-ast-mapper](https://github.com/dranshrad/codex-ast-mapper) | Compress repositories into token-budgeted LLM context |
+| [llm-cst-refactorer](https://github.com/dranshrad/llm-cst-refactorer) | Format-preserving typing & docstring refactors |
+| [automated-self-correction-loop](https://github.com/dranshrad/automated-self-correction-loop) (ASCL) | Execute → diagnose → heal loop |
+| [voice-notes-to-anthropic-artifacts](https://github.com/dranshrad/voice-notes-to-anthropic-artifacts) | Local STT → Anthropic → `~/Artifacts` |
+| [anthropic-audio-gateway](https://github.com/dranshrad/anthropic-audio-gateway) | Browser audio ↔ realtime provider adapters |

@@ -1,0 +1,6 @@
+{"version": 2, "width": 100, "height": 28, "timestamp": 1783979431, "env": {"SHELL": "/bin/zsh", "TERM": "xterm-256color"}}
+[0.05, "o", "$ poetry run codex-ast-mapper --dir . --lang python --max-tokens 800\r\n"]
+[0.17, "o", "<repo><m id=\"src.ast_extractor\"><c name=\"ScopeFrame\"></c><c name=\"NodeVisitor\"><f name=\"scope_path\" ret=\"str\" dec=\"property\"/><f name=\"push\" args=\"kind:str,name:str\" ret=\"-\"/><f name=\"pop\" ret=\"-\"/><f name=\"visit\" args=\"node:Node\" ret=\"-\"/></c><c name=\"PythonNodeVisitor\" bases=\"NodeVisitor\"><f name=\"visit\" args=\"node:Node\" ret=\"-\"/></c><c name=\"TypeScriptNodeVisitor\" bases=\"NodeVisitor\"><f name=\"visit\" args=\"node:Node\" ret=\"-\"/></c><c name=\"GoNodeVisitor\" bases=\"NodeVisitor\"><f name=\"visit\" args\u2026\r\n"]
+[0.21, "o", "\r\n"]
+[0.25, "o", "\u2502 Tokens           \u2502                                  796 / 800 \u2502\r\n"]
+[0.29, "o", "\u2502 Within budget    \u2502                                        yes \u2502\r\n"]
