@@ -1,0 +1,46 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Poetry / packaging
+dist/
+build/
+*.egg-info/
+.poetry/
+
+# Tooling
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local vendor binaries (regenerated)
+vendor/*
+!vendor/.gitkeep
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Netlify
+.netlify/
