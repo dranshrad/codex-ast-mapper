@@ -2,7 +2,7 @@
 
 **Repository Intelligence Engine** — walk a codebase with Tree-sitter, build a semantic dependency graph, and emit **token-budgeted** LLM context packs as hyper-dense XML, JSON IR, or Mermaid diagrams.
 
-Licensed under **GNU GPL v3**.
+Licensed under **GNU AGPL v3**.
 
 ## Why this exists
 
@@ -142,4 +142,8 @@ poetry run pytest -q
 
 ## License
 
-[GNU General Public License v3.0](LICENSE)
+[GNU Affero General Public License v3.0](LICENSE)
+
+This project uses **AGPL-3.0** (not GPL-3.0) so that network-hosted or
+service-wrapped deployments of the tool must also offer corresponding source,
+matching the copyleft posture of related repositories in this portfolio.

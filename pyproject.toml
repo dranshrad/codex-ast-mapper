@@ -3,7 +3,7 @@ name = "codex-ast-mapper"
 version = "0.2.0"
 description = "Repository Intelligence Engine — Tree-sitter AST maps, graphs, and LLM context packs"
 authors = ["Codex AST Mapper Contributors"]
-license = "GPL-3.0-or-later"
+license = "AGPL-3.0-or-later"
 readme = "README.md"
 packages = [{ include = "src" }]
 keywords = ["ast", "tree-sitter", "llm", "cli", "code-map"]
@@ -11,7 +11,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
