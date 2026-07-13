@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import os
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +27,8 @@ _LANGUAGE_OBJECTS: dict[SourceLanguage, Language] = {
     SourceLanguage.GO: Language(ts_go.language()),
 }
 
+InodeKey = tuple[int, int]  # (st_dev, st_ino)
+
 
 @dataclass(frozen=True, slots=True)
 class ParsedFile:
@@ -39,12 +42,14 @@ class ParsedFile:
 
 
 def _load_gitignore(root: Path) -> pathspec.PathSpec:
+    """Load root ``.gitignore`` plus hard defaults via pathspec gitwildmatch."""
     patterns: list[str] = [
         ".git/",
         "__pycache__/",
         "node_modules/",
         "vendor/",
         ".venv/",
+        "venv/",
         "dist/",
         "build/",
         "*.egg-info/",
@@ -59,36 +64,97 @@ def _load_gitignore(root: Path) -> pathspec.PathSpec:
     return pathspec.PathSpec.from_lines("gitwildmatch", patterns)
 
 
+def _inode_key(path: Path) -> InodeKey | None:
+    try:
+        st = path.stat(follow_symlinks=False)
+    except OSError:
+        return None
+    return (st.st_dev, st.st_ino)
+
+
+def _iter_source_files(
+    root: Path,
+    spec: pathspec.PathSpec,
+    allowed: set[SourceLanguage],
+) -> Iterator[Path]:
+    """
+    Walk ``root`` with circular-symlink defense.
+
+    Tracks visited directory inodes ``(st_dev, st_ino)`` so cyclical directory
+    shortcuts cannot hang or overflow the walk.
+    """
+    root = root.resolve()
+    visited_dirs: set[InodeKey] = set()
+    stack: list[Path] = [root]
+
+    root_key = _inode_key(root)
+    if root_key is not None:
+        visited_dirs.add(root_key)
+
+    while stack:
+        current = stack.pop()
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    try:
+                        name = entry.name
+                        if name in {".", ".."}:
+                            continue
+                        path = Path(entry.path)
+
+                        # Relative path for gitignore matching (posix)
+                        try:
+                            rel = path.relative_to(root).as_posix()
+                        except ValueError:
+                            continue
+
+                        if entry.is_dir(follow_symlinks=False):
+                            # Resolve real path for cycle detection across symlinks
+                            try:
+                                real = Path(os.path.realpath(path))
+                            except OSError:
+                                continue
+                            key = _inode_key(real)
+                            if key is None or key in visited_dirs:
+                                continue
+                            # Also skip if gitignore matches the directory
+                            if spec.match_file(rel) or spec.match_file(rel + "/"):
+                                continue
+                            visited_dirs.add(key)
+                            stack.append(path)
+                            continue
+
+                        if not entry.is_file(follow_symlinks=False):
+                            continue
+                        if spec.match_file(rel):
+                            continue
+                        lang = SUPPORTED_EXTENSIONS.get(path.suffix.lower())
+                        if lang is None or lang not in allowed:
+                            continue
+                        yield path
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+
+
 def discover_source_files(
     root: Path,
     languages: set[SourceLanguage] | None = None,
 ) -> list[Path]:
-    """Walk ``root`` concurrently-friendly, honoring ``.gitignore`` patterns."""
+    """Walk ``root``, honoring ``.gitignore`` and defending against symlink cycles."""
     root = root.resolve()
     if not root.is_dir():
         raise NotADirectoryError(f"Not a directory: {root}")
 
     spec = _load_gitignore(root)
     allowed = languages or set(SourceLanguage)
-    found: list[Path] = []
-
-    for path in root.rglob("*"):
-        if not path.is_file():
-            continue
-        rel = path.relative_to(root).as_posix()
-        if spec.match_file(rel):
-            continue
-        lang = SUPPORTED_EXTENSIONS.get(path.suffix.lower())
-        if lang is None or lang not in allowed:
-            continue
-        found.append(path)
-
+    found = list(_iter_source_files(root, spec, allowed))
     return sorted(found)
 
 
 def _parser_for(language: SourceLanguage) -> Parser:
-    parser = Parser(_LANGUAGE_OBJECTS[language])
-    return parser
+    return Parser(_LANGUAGE_OBJECTS[language])
 
 
 def parse_file(path: Path, root: Path) -> ParsedFile | None:

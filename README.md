@@ -33,30 +33,36 @@ poetry run codex-ast-mapper --dir ./my-repo --lang python --max-tokens 2000 -o m
 
 ## Output shape
 
+Hyper-dense minified XML (not Markdown) for maximum LLM recall per token:
+
 ```xml
 <repo>
-  <file path="src/user.py" lang="py">
-    <imp>typing,os.path</imp>
-    <class name="User" bases="BaseModel">
-      <doc>Account owner.</doc>
-      <method name="sync" args="id:int" ret="None"/>
-    </class>
-    <fn name="load" args="path:str" ret="User"/>
-  </file>
+  <m id="src.parser">
+    <imp src=".models" names="RepoMap,Node"/>
+    <c name="RepoParser">
+      <init args="root:Path"/>
+      <f name="walk" args="ignore:list" ret="Iterator[Node]">
+        <doc>Recursively yields non-ignored code files.</doc>
+      </f>
+    </c>
+  </m>
 </repo>
 ```
 
-Inner function bodies are never included — only signatures and structure.
+Inner function bodies are never included. Docstrings are triaged to a summary
+line plus `Args:` / `Returns:` blocks. Stdlib / third-party imports are filtered;
+relative dependency anchors are kept.
 
 ## Progressive pruning
 
-If the map exceeds `--max-tokens`, pruning runs in order:
+If the map exceeds `--max-tokens`, the pruning matrix steps down:
 
-1. Strip docstrings  
-2. Drop private / helper methods (`_name`)  
-3. Strip type annotations  
-4. Strip import graphs  
-5. Drop lowest-priority files until the budget fits  
+| Tier | Action | Impact |
+|------|--------|--------|
+| 1 Mild | Strip private helpers (`_name`) | ~10–15% |
+| 2 Moderate | Strip all docstrings | ~20–30% |
+| 3 Aggressive | Abbreviate types (`Optional`→`Opt`, …) | up to ~50% |
+| Final | Drop import anchors, then low-priority files | fits budget |
 
 ## Architecture
 

@@ -115,7 +115,7 @@ def map_repo(
     table.add_row("Version", __version__)
     table.add_row("Root", str(dir))
     table.add_row("Files parsed", str(len(parsed)))
-    table.add_row("Files in map", str(result.xml.count("<file ")))
+    table.add_row("Files in map", str(result.xml.count("<m ")))
     table.add_row("Tokens", f"{result.tokens} / {max_tokens}")
     table.add_row("Prune level", result.prune_level)
     table.add_row("Within budget", "yes" if result.within_budget else "NO")
