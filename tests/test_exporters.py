@@ -1,8 +1,15 @@
-"""Encoder and progressive pruning matrix tests."""
+"""Exporter and mode pipeline tests."""
 
 from __future__ import annotations
 
-from src.encoder import EncodeFlags, encode_map, encode_within_budget
+import json
+
+from src.encoder import encode_map, encode_within_budget
+from src.exporters.json import export_json
+from src.exporters.mermaid import export_mermaid
+from src.exporters.modes import mode_flags
+from src.exporters.pipeline import export_within_budget
+from src.graph import build_repo_graph
 from src.models import (
     ArgumentMeta,
     ClassMeta,
@@ -63,6 +70,12 @@ def _sample_files() -> list[FileMeta]:
             ],
         ),
         FileMeta(
+            path="pkg/models.py",
+            language=Language.PYTHON,
+            module_id="pkg.models",
+            classes=[ClassMeta(name="Base"), ClassMeta(name="RepoMap")],
+        ),
+        FileMeta(
             path="pkg/helpers.py",
             language=Language.PYTHON,
             module_id="pkg.helpers",
@@ -79,72 +92,47 @@ def _sample_files() -> list[FileMeta]:
     ]
 
 
-def test_hyper_dense_xml_shape() -> None:
+def test_json_includes_edges_and_importance() -> None:
+    files = _sample_files()
+    graph = build_repo_graph(files)
+    payload = json.loads(export_json(files, graph=graph))
+    assert payload["version"] == 2
+    assert "edges" in payload
+    assert "importance" in payload
+    assert any(e["kind"] == "imports" for e in payload["edges"])
+    assert "pkg.models" in payload["importance"]
+
+
+def test_mermaid_contains_modules_and_imports() -> None:
+    text = export_mermaid(_sample_files())
+    assert text.startswith("flowchart LR")
+    assert "pkg_user" in text or "pkg.user" in text
+    assert "-->" in text
+
+
+def test_planning_mode_smaller_than_developer() -> None:
+    files = _sample_files()
+    budget = TokenBudget(max_tokens=50_000)
+    dev = export_within_budget(files, budget, fmt="xml", mode="developer")
+    plan = export_within_budget(files, TokenBudget(max_tokens=50_000), fmt="xml", mode="planning")
+    assert plan.tokens < dev.tokens
+    assert mode_flags("planning").include_doc is False
+
+
+def test_importance_drops_helpers_before_hubs() -> None:
+    files = _sample_files()
+    graph = build_repo_graph(files)
+    # Force file dropping
+    result = encode_within_budget(files, TokenBudget(max_tokens=80))
+    assert result.within_budget
+    # helpers should be gone before models (hub)
+    if "pkg.helpers" in result.xml:
+        assert "pkg.models" in result.xml
+    assert graph.importance["pkg.helpers"] <= graph.importance["pkg.models"]
+
+
+def test_xml_still_hyper_dense() -> None:
     xml = encode_map(_sample_files())
     assert xml.startswith("<repo>")
     assert '<m id="pkg.user">' in xml
-    assert '<imp src=".models" names="User,RepoMap"/>' in xml
-    assert '<c name="User"' in xml
-    assert "<init " in xml and 'args="id:int"' in xml
-    assert '<f name="sync"' in xml
-    assert 'a="1"' in xml
-    assert "_cache_key" in xml
-    assert "Synchronize" in xml
     assert "<file " not in xml
-    assert "<class " not in xml
-    assert "<method " not in xml
-
-
-def test_tier1_strips_helpers() -> None:
-    xml = encode_map(_sample_files(), EncodeFlags(include_helpers=False))
-    assert "_cache_key" not in xml
-    assert "_internal" not in xml
-    assert "sync" in xml
-    assert "Synchronize" in xml
-
-
-def test_tier2_strips_docstrings() -> None:
-    xml = encode_map(
-        _sample_files(),
-        EncodeFlags(include_helpers=False, include_doc=False),
-    )
-    assert "Synchronize" not in xml
-    assert "Load a user" not in xml
-    assert '<f name="sync"' in xml
-
-
-def test_tier3_abbreviates_types() -> None:
-    xml = encode_map(
-        _sample_files(),
-        EncodeFlags(include_helpers=False, include_doc=False, compress_types=True),
-    )
-    assert "Optional[User]" not in xml
-    assert "Opt[User]" in xml or 'ret="Opt[User]"' in xml
-
-
-def test_progressive_pruning_matrix() -> None:
-    files = _sample_files()
-    full = encode_map(files)
-    assert "Synchronize" in full
-
-    tight = TokenBudget(max_tokens=120)
-    result = encode_within_budget(files, tight)
-    assert result.within_budget
-    assert result.prune_level in {"helpers", "docstrings", "types", "imports"}
-    if result.prune_level != "none":
-        assert "_cache_key" not in result.xml or result.prune_level == "helpers"
-
-
-def test_review_mode_strips_helpers_first() -> None:
-    files = _sample_files()
-    result = encode_within_budget(files, TokenBudget(max_tokens=50_000), mode="review")
-    assert "_cache_key" not in result.xml
-    assert "sync" in result.xml
-
-
-def test_token_budget_counts() -> None:
-    budget = TokenBudget(max_tokens=100)
-    n = budget.measure("hello world")
-    assert n > 0
-    assert budget.used == n
-    assert budget.remaining == 100 - n

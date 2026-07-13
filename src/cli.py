@@ -1,4 +1,4 @@
-"""Typer CLI for Codex-AST Repo Mapper."""
+"""Typer CLI for the Repository Intelligence Engine."""
 
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ from rich.table import Table
 
 from src import __version__
 from src.ast_extractor import extract_all
-from src.encoder import encode_within_budget
+from src.exporters.pipeline import export_within_budget
+from src.graph import build_repo_graph, top_hubs
 from src.models import Language
 from src.parser import ensure_vendor_dir, walk_and_parse
 from src.tokenizer_util import TokenBudget
@@ -24,6 +25,20 @@ class LangChoice(str, Enum):
     typescript = "typescript"
     go = "go"
     all = "all"
+
+
+class FormatChoice(str, Enum):
+    xml = "xml"
+    json = "json"
+    mermaid = "mermaid"
+
+
+class ModeChoice(str, Enum):
+    developer = "developer"
+    review = "review"
+    planning = "planning"
+    docs = "docs"
+    refactor = "refactor"
 
 
 def _resolve_languages(choice: LangChoice) -> set[Language] | None:
@@ -54,13 +69,24 @@ def map_repo(
         "--max-tokens",
         "-m",
         min=64,
-        help="Hard token budget for the emitted XML map (tiktoken cl100k_base).",
+        help="Hard token budget for the emitted artifact (tiktoken cl100k_base).",
+    ),
+    fmt: FormatChoice = typer.Option(
+        FormatChoice.xml,
+        "--format",
+        "-f",
+        help="Output format: xml | json | mermaid.",
+    ),
+    mode: ModeChoice = typer.Option(
+        ModeChoice.developer,
+        "--mode",
+        help="LLM workflow mode: developer | review | planning | docs | refactor.",
     ),
     output: Path | None = typer.Option(
         None,
         "--output",
         "-o",
-        help="Write XML to this path instead of stdout.",
+        help="Write artifact to this path instead of stdout.",
     ),
     workers: int | None = typer.Option(
         None,
@@ -68,6 +94,11 @@ def map_repo(
         "-w",
         min=1,
         help="Thread pool size for concurrent parsing (default: auto).",
+    ),
+    graph_stats: bool = typer.Option(
+        False,
+        "--graph-stats",
+        help="Print module/edge counts and top hubs on stderr.",
     ),
     quiet: bool = typer.Option(
         False,
@@ -81,7 +112,7 @@ def map_repo(
         help="Print version and exit.",
     ),
 ) -> None:
-    """Walk a directory, extract AST structure, and emit a pruned XML map."""
+    """Walk a repository, build a semantic graph, and emit a budgeted artifact."""
     if version:
         typer.echo(__version__)
         raise typer.Exit(code=0)
@@ -96,32 +127,58 @@ def map_repo(
 
     parsed = walk_and_parse(dir, languages, max_workers=workers, on_error=on_error)
     files = extract_all(parsed)
+    graph = build_repo_graph(files)
     budget = TokenBudget(max_tokens=max_tokens)
-    result = encode_within_budget(files, budget)
+    result = export_within_budget(
+        files,
+        budget,
+        fmt=fmt.value,
+        mode=mode.value,
+        graph=graph,
+    )
 
     if output is not None:
-        output.write_text(result.xml + "\n", encoding="utf-8")
+        output.write_text(result.content + "\n", encoding="utf-8")
     else:
-        typer.echo(result.xml)
+        typer.echo(result.content)
 
-    if quiet:
+    if quiet and not graph_stats:
         if not result.within_budget:
             raise typer.Exit(code=2)
         return
 
-    table = Table(title="Codex-AST Repo Mapper", show_header=True, header_style="bold")
-    table.add_column("Metric")
-    table.add_column("Value", justify="right")
-    table.add_row("Version", __version__)
-    table.add_row("Root", str(dir))
-    table.add_row("Files parsed", str(len(parsed)))
-    table.add_row("Files in map", str(result.xml.count("<m ")))
-    table.add_row("Tokens", f"{result.tokens} / {max_tokens}")
-    table.add_row("Prune level", result.prune_level)
-    table.add_row("Within budget", "yes" if result.within_budget else "NO")
-    if errors:
-        table.add_row("Parse errors", str(len(errors)))
-    console.print(table)
+    if not quiet:
+        table = Table(
+            title="Repository Intelligence Engine",
+            show_header=True,
+            header_style="bold",
+        )
+        table.add_column("Metric")
+        table.add_column("Value", justify="right")
+        table.add_row("Version", __version__)
+        table.add_row("Root", str(dir))
+        table.add_row("Format", result.format)
+        table.add_row("Mode", result.mode)
+        table.add_row("Files parsed", str(len(parsed)))
+        table.add_row("Modules in graph", str(len(graph.modules)))
+        table.add_row("Edges", str(len(graph.edges)))
+        if result.format == "xml":
+            table.add_row("Modules in map", str(result.content.count("<m ")))
+        table.add_row("Tokens", f"{result.tokens} / {max_tokens}")
+        table.add_row("Prune level", result.prune_level)
+        table.add_row("Within budget", "yes" if result.within_budget else "NO")
+        if errors:
+            table.add_row("Parse errors", str(len(errors)))
+        console.print(table)
+
+    if graph_stats:
+        hubs = top_hubs(graph, n=5)
+        hub_table = Table(title="Top hubs (importance)", show_header=True)
+        hub_table.add_column("Module")
+        hub_table.add_column("Score", justify="right")
+        for mid, score in hubs:
+            hub_table.add_row(mid, f"{score:.2f}")
+        console.print(hub_table)
 
     if not result.within_budget:
         raise typer.Exit(code=2)
@@ -129,7 +186,10 @@ def map_repo(
 
 app = typer.Typer(
     name="codex-ast-mapper",
-    help="Map a repository into a hyper-dense, token-budgeted XML AST summary for LLMs.",
+    help=(
+        "Repository Intelligence Engine — structural AST maps, dependency graphs, "
+        "and token-budgeted LLM context packs."
+    ),
     add_completion=False,
     invoke_without_command=True,
     no_args_is_help=False,

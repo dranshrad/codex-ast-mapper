@@ -1,4 +1,4 @@
-"""Shared typed models for extracted AST metadata."""
+"""Shared typed models for extracted AST metadata and repository graphs."""
 
 from __future__ import annotations
 
@@ -44,6 +44,7 @@ class ImportMeta:
     source: str
     names: list[str] = field(default_factory=list)
     is_relative: bool = False
+    resolved: str | None = None  # filled by graph builder when known
 
 
 @dataclass(slots=True)
@@ -80,6 +81,41 @@ class FileMeta:
     imports: list[ImportMeta] = field(default_factory=list)
     classes: list[ClassMeta] = field(default_factory=list)
     functions: list[FunctionMeta] = field(default_factory=list)
+    importance: float = 0.0  # filled by graph builder
+
+
+class EdgeKind(str, Enum):
+    IMPORTS = "imports"
+    INHERITS = "inherits"
+    CONTAINS = "contains"
+    DEFINES = "defines"
+
+
+@dataclass(slots=True)
+class SymbolRef:
+    """Stable symbol identity, e.g. ``pkg.user:User.sync``."""
+
+    id: str
+    name: str
+    kind: str  # module | class | function | method
+    module_id: str
+    is_private: bool = False
+
+
+@dataclass(slots=True)
+class GraphEdge:
+    source: str
+    target: str
+    kind: EdgeKind
+    name: str | None = None
+
+
+@dataclass(slots=True)
+class RepoGraph:
+    modules: dict[str, FileMeta] = field(default_factory=dict)
+    symbols: dict[str, SymbolRef] = field(default_factory=dict)
+    edges: list[GraphEdge] = field(default_factory=list)
+    importance: dict[str, float] = field(default_factory=dict)  # module_id -> score
 
 
 # Tier 1 = helpers, Tier 2 = docstrings, Tier 3 = type compression, then imports/files
@@ -92,3 +128,9 @@ PRUNE_ORDER: tuple[PruneLevel, ...] = (
     "types",
     "imports",
 )
+
+
+LLMMode = Literal["developer", "review", "planning", "docs", "refactor"]
+
+
+OutputFormat = Literal["xml", "json", "mermaid"]

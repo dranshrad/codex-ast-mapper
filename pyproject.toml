@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "codex-ast-mapper"
-version = "0.1.0"
-description = "High-performance AST repo mapper that emits LLM-dense XML structural maps"
+version = "0.2.0"
+description = "Repository Intelligence Engine — Tree-sitter AST maps, graphs, and LLM context packs"
 authors = ["Codex AST Mapper Contributors"]
 license = "GPL-3.0-or-later"
 readme = "README.md"

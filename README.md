@@ -1,8 +1,19 @@
 # Codex-AST Repo Mapper
 
-High-performance Python CLI that walks a repository, parses **Python**, **TypeScript**, and **Go** with [Tree-sitter](https://tree-sitter.github.io/tree-sitter/), extracts structural metadata (classes, inheritance, imports, signatures — **not** function bodies), and emits a **minified XML map** sized to a Tiktoken token budget.
+**Repository Intelligence Engine** — walk a codebase with Tree-sitter, build a semantic dependency graph, and emit **token-budgeted** LLM context packs as hyper-dense XML, JSON IR, or Mermaid diagrams.
 
 Licensed under **GNU GPL v3**.
+
+## Why this exists
+
+LLMs do not need raw source dumps. They need **structure**: modules, public APIs, inheritance, and internal imports — compressed to a hard token budget.
+
+```text
+Repository → Parser → Extractor → Semantic IR → RepoGraph → Compression → Exporters
+                                                              ├─ XML
+                                                              ├─ JSON
+                                                              └─ Mermaid
+```
 
 ## Install
 
@@ -15,67 +26,110 @@ poetry run codex-ast-mapper --help
 ## Usage
 
 ```bash
-# Map the current directory (all supported languages)
-poetry run codex-ast-mapper --dir . --max-tokens 4000
+# Default: hyper-dense XML for LLM developer context
+poetry run codex-ast-mapper --dir . --lang python --max-tokens 4000
 
-# Python only, write to a file
-poetry run codex-ast-mapper --dir ./my-repo --lang python --max-tokens 2000 -o map.xml -q
+# JSON IR with edges + importance scores
+poetry run codex-ast-mapper --format json --mode review -m 3000 -q
+
+# Mermaid module dependency diagram
+poetry run codex-ast-mapper --format mermaid --mode planning -o graph.mmd
+
+# Show top graph hubs on stderr
+poetry run codex-ast-mapper --graph-stats --dir .
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--dir` / `-d` | Repository root to walk |
+| `--dir` / `-d` | Repository root |
 | `--lang` / `-l` | `python` \| `typescript` \| `go` \| `all` |
+| `--format` / `-f` | `xml` \| `json` \| `mermaid` |
+| `--mode` | `developer` \| `review` \| `planning` \| `docs` \| `refactor` |
 | `--max-tokens` / `-m` | Hard Tiktoken (`cl100k_base`) budget |
-| `--output` / `-o` | Write XML to a path (default: stdout) |
-| `--workers` / `-w` | Concurrent parse workers |
-| `--quiet` / `-q` | Hide stderr diagnostics |
+| `--graph-stats` | Print module/edge hubs on stderr |
+| `--output` / `-o` | Write artifact to a path |
+| `--quiet` / `-q` | Hide diagnostics |
 
-## Output shape
+## Output shapes
 
-Hyper-dense minified XML (not Markdown) for maximum LLM recall per token:
+### XML (default)
 
 ```xml
 <repo>
   <m id="src.parser">
-    <imp src=".models" names="RepoMap,Node"/>
-    <c name="RepoParser">
-      <init args="root:Path"/>
-      <f name="walk" args="ignore:list" ret="Iterator[Node]">
-        <doc>Recursively yields non-ignored code files.</doc>
+    <imp src="src.models" names="FileMeta"/>
+    <c name="ParsedFile">
+      <f name="walk" args="root:Path" ret="list[Path]">
+        <doc>Walk root honoring gitignore.</doc>
       </f>
     </c>
   </m>
 </repo>
 ```
 
-Inner function bodies are never included. Docstrings are triaged to a summary
-line plus `Args:` / `Returns:` blocks. Stdlib / third-party imports are filtered;
-relative dependency anchors are kept.
+### JSON
 
-## Progressive pruning
+Includes `modules`, `edges` (`imports` / `inherits` / …), and per-module `importance` scores for downstream tools.
 
-If the map exceeds `--max-tokens`, the pruning matrix steps down:
+### Mermaid
 
-| Tier | Action | Impact |
-|------|--------|--------|
-| 1 Mild | Strip private helpers (`_name`) | ~10–15% |
-| 2 Moderate | Strip all docstrings | ~20–30% |
-| 3 Aggressive | Abbreviate types (`Optional`→`Opt`, …) | up to ~50% |
-| Final | Drop import anchors, then low-priority files | fits budget |
+```mermaid
+flowchart LR
+  src_parser["src.parser"] --> src_models["src.models"]
+```
+
+## LLM modes
+
+| Mode | Prioritizes |
+|------|-------------|
+| `developer` | Full signatures, docs, imports |
+| `review` | Public APIs; helpers stripped early |
+| `planning` | Aggressive compression (types abbreviated, no docs) |
+| `docs` | Docstrings + public signatures |
+| `refactor` | High-centrality modules, inheritance, fan-in |
+
+When over budget: strip helpers → docs → type abbreviations → imports → **drop lowest-importance modules first**.
 
 ## Architecture
 
+| Layer | Module |
+|-------|--------|
+| Walk + parse | `src/parser.py` |
+| Scoped extraction | `src/ast_extractor.py` |
+| Graph + importance | `src/graph.py` |
+| Exporters | `src/exporters/` |
+| Budget | `src/tokenizer_util.py` |
+| CLI | `src/cli.py` |
+
+## Benchmarks
+
+```bash
+poetry run python benchmarks/run_bench.py
 ```
-src/
-  cli.py              # Typer interface
-  parser.py           # Concurrent walker + Tree-sitter
-  ast_extractor.py    # Structural metadata (no bodies)
-  encoder.py          # Minified XML + pruning
-  tokenizer_util.py   # Tiktoken budget tracker
-  models.py           # Shared typed dataclasses
-vendor/               # Optional compiled grammar packs
-```
+
+Example (this repository, local run):
+
+| files | modules | edges | wall_s | files_per_s | tokens | compression_ratio | rss_mb | prune_level |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 21 | 21 | 349 | 0.23 | 90 | 4449 | 22.18 | ~83 | none |
+
+Re-run locally for machine-specific numbers. Compression ratio is raw source characters ÷ emitted tokens.
+
+## Use cases
+
+- **LLM context packs** — feed `--format xml` into agent prompts under a hard budget
+- **Review** — `--mode review` for public API surfaces
+- **Planning** — `--format mermaid` for dependency orientation
+- **Tooling** — `--format json` for editors, bots, and CI checks
+
+## Roadmap
+
+| Version | Focus |
+|---------|--------|
+| **0.2** (current) | Semantic IR, RepoGraph, JSON/Mermaid, modes, importance pruning |
+| **0.5** | Call graphs, cross-module references |
+| **1.0** | Repository Intelligence Platform |
+| **2.0** | LLM-native semantic repository OS |
 
 ## Development
 

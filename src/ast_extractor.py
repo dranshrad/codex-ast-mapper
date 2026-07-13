@@ -15,6 +15,7 @@ from src.models import (
     Language,
 )
 from src.parser import ParsedFile
+from src.paths import module_id_from_path
 
 Node = Any
 
@@ -64,23 +65,6 @@ def _child_by_field(node: Node, field_name: str) -> Node | None:
 
 def _is_private(name: str) -> bool:
     return name.startswith("_") and not (name.startswith("__") and name.endswith("__"))
-
-
-def _module_id_from_path(relative_path: str) -> str:
-    """Convert ``src/parser.py`` → ``src.parser``."""
-    path = relative_path.replace("\\", "/")
-    if path.endswith(".py"):
-        path = path[: -len(".py")]
-    elif path.endswith(".pyi"):
-        path = path[: -len(".pyi")]
-    elif path.endswith(".tsx"):
-        path = path[: -len(".tsx")]
-    elif path.endswith(".ts"):
-        path = path[: -len(".ts")]
-    elif path.endswith(".go"):
-        path = path[: -len(".go")]
-    parts = [p for p in path.split("/") if p and p != "__init__"]
-    return ".".join(parts)
 
 
 def triage_docstring(raw: str) -> str | None:
@@ -803,7 +787,7 @@ class GoNodeVisitor(NodeVisitor):
 
 def extract_file(parsed: ParsedFile) -> FileMeta:
     """Extract structural metadata (bodies stripped) with scoped hierarchy."""
-    module_id = _module_id_from_path(parsed.relative_path)
+    module_id = module_id_from_path(parsed.relative_path)
     visitor: NodeVisitor
 
     if parsed.language is Language.PYTHON:
