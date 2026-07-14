@@ -1,3 +1,5 @@
+![60s proof: 21 modules → dense XML under an 800-token budget](docs/demo/map-repo.gif)
+
 # Codex-AST Repo Mapper
 
 **Repository Intelligence Engine** — walk a codebase with Tree-sitter, build a semantic dependency graph, and emit **token-budgeted** LLM context packs as hyper-dense XML, JSON IR, or Mermaid diagrams.
@@ -28,6 +30,7 @@ poetry run codex-ast-mapper --help
 ```bash
 poetry run codex-ast-mapper --dir . --lang python --max-tokens 800
 asciinema play docs/demo/map-repo.cast
+# regenerate GIF: agg --speed 1.5 --font-size 14 --theme monokai docs/demo/map-repo.cast docs/demo/map-repo.gif
 ```
 
 See [docs/demo/map-repo.md](docs/demo/map-repo.md).
